@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>danitts - Voice Synthesizer</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #e6edf3; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 28px; max-width: 520px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h1 { margin: 0 0 8px 0; color: #58a6ff; font-size: 1.8rem; }
+        p { color: #8b949e; margin-bottom: 20px; font-size: 0.95rem; }
+        textarea { width: 100%; height: 120px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #fff; padding: 12px; font-size: 1rem; outline: none; transition: border 0.2s; resize: vertical; }
+        textarea:focus { border-color: #58a6ff; }
+        button { width: 100%; background: #238636; border: none; color: white; padding: 12px; font-size: 1rem; font-weight: 600; border-radius: 8px; cursor: pointer; margin-top: 14px; transition: background 0.2s; }
+        button:hover { background: #2ea043; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .result { margin-top: 24px; display: none; padding-top: 18px; border-top: 1px solid #30363d; }
+        audio { width: 100%; margin-top: 10px; border-radius: 8px; }
+        .link-container { display: flex; gap: 8px; margin-top: 12px; }
+        input[type="text"] { flex: 1; background: #0d1117; border: 1px solid #30363d; color: #8b949e; padding: 10px; border-radius: 6px; font-size: 0.9rem; }
+        .copy-btn { width: auto; background: #30363d; margin: 0; padding: 0 16px; font-size: 0.9rem; }
+        .copy-btn:hover { background: #484f58; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>🎙️ danitts Studio</h1>
+    <p>Enter text to generate speech using your cloned voice.</p>
+
+    <textarea id="inputText" placeholder="Type what you want the cloned voice to say..."></textarea>
+    <button id="genBtn" onclick="generateSpeech()">Synthesize Speech</button>
+
+    <div class="result" id="resultBlock">
+        <label style="font-weight: 600; font-size: 0.9rem;">Play Audio:</label>
+        <audio id="audioPlayer" controls></audio>
+
+        <label style="font-weight: 600; font-size: 0.9rem; margin-top: 14px; display: block;">Raw Audio URL:</label>
+        <div class="link-container">
+            <input type="text" id="audioUrlInput" readonly />
+            <button class="copy-btn" onclick="copyLink()">Copy</button>
+        </div>
+    </div>
+</div>
+
+<script>
+async function generateSpeech() {
+    const text = document.getElementById("inputText").value;
+    const btn = document.getElementById("genBtn");
+    const resultBlock = document.getElementById("resultBlock");
+    const audioPlayer = document.getElementById("audioPlayer");
+    const audioUrlInput = document.getElementById("audioUrlInput");
+
+    if (!text.trim()) return alert("Please enter some text!");
+
+    btn.disabled = true;
+    btn.innerText = "Generating voice...";
+
+    try {
+        const res = await fetch("/api/v1/tts", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: text })
+        });
+
+        const data = await res.json();
+        if (data.status === "success") {
+            audioPlayer.src = data.audio_url;
+            audioUrlInput.value = data.audio_url;
+            resultBlock.style.display = "block";
+            audioPlayer.play();
+        } else {
+            alert(data.detail || "Synthesis error.");
+        }
+    } catch (err) {
+        alert("Failed to connect to backend server.");
+        console.error(err);
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "Synthesize Speech";
+    }
+}
+
+function copyLink() {
+    const input = document.getElementById("audioUrlInput");
+    input.select();
+    navigator.clipboard.writeText(input.value);
+    alert("Audio URL copied!");
+}
+</script>
+
+</body>
+</html>

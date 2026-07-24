@@ -3,90 +3,243 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>danitts - Voice Synthesizer</title>
+    <title>danitts Studio - Voice Generator</title>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #e6edf3; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
-        .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 28px; max-width: 520px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        body { 
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            background: #0d1117; 
+            color: #c9d1d9; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+            padding: 20px; 
+        }
+        .container { 
+            background: #161b22; 
+            border: 1px solid #30363d; 
+            border-radius: 12px; 
+            padding: 28px; 
+            max-width: 550px; 
+            width: 100%; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); 
+        }
         h1 { margin: 0 0 8px 0; color: #58a6ff; font-size: 1.8rem; }
-        p { color: #8b949e; margin-bottom: 20px; font-size: 0.95rem; }
-        textarea { width: 100%; height: 120px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #fff; padding: 12px; font-size: 1rem; outline: none; transition: border 0.2s; resize: vertical; }
+        p { color: #8b949e; margin-top: 0; margin-bottom: 20px; font-size: 0.95rem; }
+        
+        label { font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #8b949e; display: block; margin-bottom: 6px; }
+        textarea { 
+            width: 100%; 
+            height: 110px; 
+            background: #0d1117; 
+            border: 1px solid #30363d; 
+            border-radius: 8px; 
+            color: #fff; 
+            padding: 12px; 
+            font-size: 1rem; 
+            outline: none; 
+            resize: vertical; 
+            transition: border-color 0.2s;
+        }
         textarea:focus { border-color: #58a6ff; }
-        button { width: 100%; background: #238636; border: none; color: white; padding: 12px; font-size: 1rem; font-weight: 600; border-radius: 8px; cursor: pointer; margin-top: 14px; transition: background 0.2s; }
+        
+        button { 
+            width: 100%; 
+            background: #238636; 
+            border: none; 
+            color: white; 
+            padding: 12px; 
+            font-size: 1rem; 
+            font-weight: 600; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            margin-top: 14px; 
+            transition: background 0.2s; 
+        }
         button:hover { background: #2ea043; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .result { margin-top: 24px; display: none; padding-top: 18px; border-top: 1px solid #30363d; }
+
+        /* Status & Output Box */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            border-radius: 20px;
+            margin-top: 16px;
+            background: #21262d;
+            color: #8b949e;
+        }
+        .status-badge.success { background: rgba(46, 160, 67, 0.2); color: #3fb950; border: 1px solid #2ea043; }
+        .status-badge.error { background: rgba(248, 81, 73, 0.2); color: #f85149; border: 1px solid #f85149; }
+        .status-badge.loading { background: rgba(56, 139, 253, 0.2); color: #58a6ff; border: 1px solid #388bfd; }
+
+        .result-section { 
+            margin-top: 20px; 
+            padding-top: 16px; 
+            border-top: 1px solid #30363d; 
+            display: none; 
+        }
+
         audio { width: 100%; margin-top: 10px; border-radius: 8px; }
-        .link-container { display: flex; gap: 8px; margin-top: 12px; }
-        input[type="text"] { flex: 1; background: #0d1117; border: 1px solid #30363d; color: #8b949e; padding: 10px; border-radius: 6px; font-size: 0.9rem; }
-        .copy-btn { width: auto; background: #30363d; margin: 0; padding: 0 16px; font-size: 0.9rem; }
+
+        .link-group { display: flex; gap: 8px; margin-top: 10px; }
+        input[type="text"] { 
+            flex: 1; 
+            background: #0d1117; 
+            border: 1px solid #30363d; 
+            color: #c9d1d9; 
+            padding: 10px; 
+            border-radius: 6px; 
+            font-size: 0.85rem; 
+        }
+        .copy-btn { 
+            width: auto; 
+            background: #30363d; 
+            margin: 0; 
+            padding: 0 16px; 
+            font-size: 0.85rem; 
+        }
         .copy-btn:hover { background: #484f58; }
+
+        .error-log {
+            background: #0d1117;
+            border: 1px solid #f85149;
+            color: #ff7b72;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 0.85rem;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            display: none;
+        }
     </style>
 </head>
 <body>
 
-<div class="card">
+<div class="container">
     <h1>🎙️ danitts Studio</h1>
-    <p>Enter text to generate speech using your cloned voice.</p>
+    <p>Generate speech using your custom cloned voice.</p>
 
-    <textarea id="inputText" placeholder="Type what you want the cloned voice to say..."></textarea>
-    <button id="genBtn" onclick="generateSpeech()">Synthesize Speech</button>
+    <label for="inputText">Prompt Text</label>
+    <textarea id="inputText" placeholder="Type text to convert to speech..."></textarea>
+    
+    <button id="genBtn" onclick="generateTTS()">Synthesize Audio</button>
 
-    <div class="result" id="resultBlock">
-        <label style="font-weight: 600; font-size: 0.9rem;">Play Audio:</label>
-        <audio id="audioPlayer" controls></audio>
+    <div id="statusBadge" class="status-badge" style="display:none;">STATUS: Ready</div>
 
-        <label style="font-weight: 600; font-size: 0.9rem; margin-top: 14px; display: block;">Raw Audio URL:</label>
-        <div class="link-container">
+    <div id="errorLog" class="error-log"></div>
+
+    <div class="result-section" id="resultBlock">
+        <label>Playable Audio</label>
+        <audio id="audioPlayer" controls preload="auto"></audio>
+
+        <label style="margin-top: 14px;">Raw Audio URL</label>
+        <div class="link-group">
             <input type="text" id="audioUrlInput" readonly />
-            <button class="copy-btn" onclick="copyLink()">Copy</button>
+            <button class="copy-btn" onclick="copyAudioUrl()">Copy Link</button>
         </div>
     </div>
 </div>
 
 <script>
-async function generateSpeech() {
-    const text = document.getElementById("inputText").value;
+async function generateTTS() {
+    const textInput = document.getElementById("inputText").value.trim();
     const btn = document.getElementById("genBtn");
+    const statusBadge = document.getElementById("statusBadge");
     const resultBlock = document.getElementById("resultBlock");
+    const errorLog = document.getElementById("errorLog");
     const audioPlayer = document.getElementById("audioPlayer");
     const audioUrlInput = document.getElementById("audioUrlInput");
 
-    if (!text.trim()) return alert("Please enter some text!");
+    if (!textInput) {
+        alert("Please enter text before generating.");
+        return;
+    }
 
+    // Reset UI state
     btn.disabled = true;
-    btn.innerText = "Generating voice...";
+    btn.innerText = "Synthesizing...";
+    resultBlock.style.display = "none";
+    errorLog.style.display = "none";
+    
+    statusBadge.style.display = "inline-block";
+    statusBadge.className = "status-badge loading";
+    statusBadge.innerText = "STATUS: 102 Processing...";
+
+    // Determine target API endpoint dynamically or fallback to Render
+    const API_ENDPOINT = window.location.origin.includes("onrender.com") 
+        ? `${window.location.origin}/api/v1/tts`
+        : "https://dani-voice.onrender.com/api/v1/tts";
 
     try {
-        const res = await fetch("/api/v1/tts", {
+        const response = await fetch(API_ENDPOINT, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: text })
+            headers: { 
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({ text: textInput })
         });
 
-        const data = await res.json();
-        if (data.status === "success") {
-            audioPlayer.src = data.audio_url;
-            audioUrlInput.value = data.audio_url;
-            resultBlock.style.display = "block";
-            audioPlayer.play();
+        // Display HTTP Status Code
+        const statusCode = response.status;
+        const statusText = response.statusText || (statusCode === 200 ? "OK" : "Error");
+
+        if (response.ok) {
+            const data = await response.json();
+            
+            statusBadge.className = "status-badge success";
+            statusBadge.innerText = `HTTP ${statusCode} ${statusText} - Success`;
+
+            if (data.audio_url) {
+                audioPlayer.src = data.audio_url;
+                audioUrlInput.value = data.audio_url;
+                resultBlock.style.display = "block";
+                
+                // Play audio automatically
+                audioPlayer.play().catch(e => console.log("Autoplay blocked by browser:", e));
+            } else {
+                throw new Error("API returned 200 OK but no audio_url was found in response.");
+            }
+
         } else {
-            alert(data.detail || "Synthesis error.");
+            statusBadge.className = "status-badge error";
+            statusBadge.innerText = `HTTP ${statusCode} ${statusText}`;
+
+            let errDetail = "";
+            try {
+                const errJson = await response.json();
+                errDetail = JSON.stringify(errJson, null, 2);
+            } catch (e) {
+                errDetail = await response.text();
+            }
+
+            errorLog.style.display = "block";
+            errorLog.innerText = `Server Error (${statusCode}):\n${errDetail}`;
         }
+
     } catch (err) {
-        alert("Failed to connect to backend server.");
-        console.error(err);
+        statusBadge.className = "status-badge error";
+        statusBadge.innerText = "HTTP Network / Connection Failed";
+        
+        errorLog.style.display = "block";
+        errorLog.innerText = `Connection Error: ${err.message}\nCheck if backend on Render is awake or sleeping.`;
     } finally {
         btn.disabled = false;
-        btn.innerText = "Synthesize Speech";
+        btn.innerText = "Synthesize Audio";
     }
 }
 
-function copyLink() {
+function copyAudioUrl() {
     const input = document.getElementById("audioUrlInput");
     input.select();
     navigator.clipboard.writeText(input.value);
-    alert("Audio URL copied!");
+    alert("Audio URL copied to clipboard!");
 }
 </script>
 

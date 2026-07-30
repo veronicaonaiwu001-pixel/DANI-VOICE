@@ -100,21 +100,59 @@ async def generate_speech(data: SpeechRequest, request: Request):
     try:
         client = Client("Qwen/Qwen3-TTS")
 
-        # Pass named parameters directly matching the Space's signature
-        result = client.predict(
-            ref_audio=handle_file(voice_file),
-            ref_text="Reference voice sample",
-            target_text=text_content,
-            target_lang=selected_lang,
-            api_name="/predict"
-        )
+        # Log exact API endpoints to Render console for debugging
+        try:
+            api_info = client.view_api(return_format="dict")
+            logger.info(f"Target Space API Schema: {api_info}")
+        except Exception as api_err:
+            logger.warning(f"Could not fetch view_api info: {api_err}")
 
-        temp_audio_path = (
-            result[0] if isinstance(result, (tuple, list)) else result
-        )
+        result = None
+
+        # Strategy A: Pass named arguments targeting standard TTS signature
+        try:
+            result = client.predict(
+                ref_audio=handle_file(voice_file),
+                ref_text="",
+                target_text=text_content,
+                target_lang=selected_lang,
+            )
+        except Exception as e_named:
+            logger.warning(f"Named kwargs strategy failed: {e_named}")
+
+        # Strategy B: Fallback to single text + audio standard positional prediction
+        if not result:
+            try:
+                result = client.predict(
+                    handle_file(voice_file),
+                    text_content,
+                    selected_lang,
+                )
+            except Exception as e_pos:
+                logger.warning(f"Positional 3-arg strategy failed: {e_pos}")
+
+        # Strategy C: Raw predict using default fn_index without explicit api_name parameter string
+        if not result:
+            result = client.predict(
+                handle_file(voice_file),
+                "",
+                selected_lang,
+                text_content,
+                selected_lang,
+                "0.6B",
+            )
+
+        # Process output audio path
+        temp_audio_path = None
+        if isinstance(result, (tuple, list)):
+            temp_audio_path = result[0]
+        elif isinstance(result, dict) and "name" in result:
+            temp_audio_path = result["name"]
+        else:
+            temp_audio_path = str(result)
 
         if not temp_audio_path or not os.path.exists(temp_audio_path):
-            raise Exception("Gradio client returned an invalid audio file path.")
+            raise Exception(f"Gradio client returned an invalid audio path: {temp_audio_path}")
 
         unique_id = uuid.uuid4().hex[:10]
         filename = f"danitts_{unique_id}.wav"

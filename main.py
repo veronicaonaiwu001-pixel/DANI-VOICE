@@ -1,40 +1,64 @@
+import os
+import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 from gradio_client import Client, handle_file
 from pydantic import BaseModel
-import os
 
-app = FastAPI(title="danitts Studio")
+# ------------------------------------------------------------------------------
+# Logging & Setup
+# ------------------------------------------------------------------------------
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("danitts")
 
-# 1. Serve index.html when opening the root URL ("/")
-@app.get("/", response_class=FileResponse)
-async def read_index():
-    # Make sure index.html is in your repo directory
-    return FileResponse("index.html")
+app = FastAPI(title="danitts Studio API")
 
-# 2. Your TTS API Request Model
+# Initialize Hugging Face Gradio Client
+# Using mrfakename/E2-F5-TTS for stable zero-shot voice cloning
+TTS_CLIENT = Client("mrfakename/E2-F5-TTS")
+
+# ------------------------------------------------------------------------------
+# Request Schemas
+# ------------------------------------------------------------------------------
 class TTSRequest(BaseModel):
     text: str
 
-# 3. Your Voice Synthesis Route
+# ------------------------------------------------------------------------------
+# Routes
+# ------------------------------------------------------------------------------
+@app.get("/", response_class=FileResponse)
+async def serve_index():
+    """Serves the danitts Studio HTML UI at the root path."""
+    index_path = os.path.join(os.path.dirname(__file__), "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    raise HTTPException(status_code=404, detail="index.html not found.")
+
 @app.post("/api/v1/tts")
 async def generate_speech(request: TTSRequest):
+    """Synthesizes speech from prompt text using voice_reference.wav."""
     try:
-        # Point to a public zero-shot TTS model (like F5-TTS or XTTS)
-        client = Client("abidlabs/E2-F5-TTS")
-        
         ref_path = os.path.join(os.path.dirname(__file__), "voice_reference.wav")
-        
-        result = client.predict(
-            ref_audio_input=handle_file(ref_path),
-            ref_text_input="",
-            gen_text_input=request.text,
-            model_choice="F5-TTS",
-            remove_silence=False,
-            api_name="/basic_tts"
+        if not os.path.exists(ref_path):
+            raise HTTPException(status_code=400, detail="voice_reference.wav file missing from repository.")
+
+        logger.info(f"Generating TTS for prompt: '{request.text}'")
+
+        # Call the HF space with exact schema parameters
+        result = TTS_CLIENT.predict(
+            ref_audio_orig=handle_file(ref_path),
+            ref_text="",                        # Empty string lets the space auto-transcribe the reference
+            gen_text=request.text,              # Text to synthesize into speech
+            model="F5-TTS",                     # Target TTS model architecture
+            remove_silence=False,               # Keep natural pauses
+            cross_fade_duration=0.15,           # Smooth audio transitions
+            speed=1.0,                          # Playback speed
+            api_name="/infer"                   # Exact api_name route on mrfakename/E2-F5-TTS
         )
+
+        logger.info("Speech synthesis completed successfully.")
         return {"audio_path": result}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Speech synthesis error: {e}")
+        logger.error(f"Speech synthesis error: {e}")
+        raise HTTPException(status_code=500, detail=f"Speech synthesis error: {str(e)}")

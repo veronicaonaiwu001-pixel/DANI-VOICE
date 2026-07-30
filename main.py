@@ -13,8 +13,7 @@ logger = logging.getLogger("danitts")
 
 app = FastAPI(title="danitts Studio API")
 
-# Initialize Hugging Face Gradio Client
-# Using mrfakename/E2-F5-TTS for stable zero-shot voice cloning
+# Initialize Client with the inspected HF space
 TTS_CLIENT = Client("mrfakename/E2-F5-TTS")
 
 # ------------------------------------------------------------------------------
@@ -28,11 +27,11 @@ class TTSRequest(BaseModel):
 # ------------------------------------------------------------------------------
 @app.get("/", response_class=FileResponse)
 async def serve_index():
-    """Serves the danitts Studio HTML UI at the root path."""
+    """Serves the danitts Studio UI at the root path."""
     index_path = os.path.join(os.path.dirname(__file__), "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    raise HTTPException(status_code=404, detail="index.html not found.")
+    raise HTTPException(status_code=404, detail="index.html not found in repository.")
 
 @app.post("/api/v1/tts")
 async def generate_speech(request: TTSRequest):
@@ -40,20 +39,17 @@ async def generate_speech(request: TTSRequest):
     try:
         ref_path = os.path.join(os.path.dirname(__file__), "voice_reference.wav")
         if not os.path.exists(ref_path):
-            raise HTTPException(status_code=400, detail="voice_reference.wav file missing from repository.")
+            raise HTTPException(status_code=400, detail="voice_reference.wav missing from repository.")
 
-        logger.info(f"Generating TTS for prompt: '{request.text}'")
+        logger.info(f"Generating speech for prompt: '{request.text}'")
 
-        # Call the HF space with exact schema parameters
+        # Matched precisely to Client.predict() schema from Colab
         result = TTS_CLIENT.predict(
-            ref_audio_orig=handle_file(ref_path),
-            ref_text="",                        # Empty string lets the space auto-transcribe the reference
-            gen_text=request.text,              # Text to synthesize into speech
-            model="F5-TTS",                     # Target TTS model architecture
-            remove_silence=False,               # Keep natural pauses
-            cross_fade_duration=0.15,           # Smooth audio transitions
-            speed=1.0,                          # Playback speed
-            api_name="/infer"                   # Exact api_name route on mrfakename/E2-F5-TTS
+            ref_audio=handle_file(ref_path),
+            ref_text="",
+            gen_text=request.text,
+            remove_silence=False,
+            api_name="/predict"
         )
 
         logger.info("Speech synthesis completed successfully.")

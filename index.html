@@ -183,7 +183,10 @@ async function generateTTS() {
                 "Content-Type": "application/json",
                 "Accept": "application/json"
             },
-            body: JSON.stringify({ text: textInput })
+            body: JSON.stringify({ 
+                text: textInput,
+                language: "English"
+            })
         });
 
         // Display HTTP Status Code

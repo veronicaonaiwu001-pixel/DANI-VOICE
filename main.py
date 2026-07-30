@@ -100,13 +100,15 @@ async def generate_speech(data: SpeechRequest, request: Request):
     try:
         client = Client("Qwen/Qwen3-TTS")
 
+        # Positional array aligned to exact Qwen3-TTS gradio parameters:
+        # [ref_audio, prompt_text, prompt_lang, target_text, target_lang, use_xvector, model_size]
         predict_args = (
-            handle_file(voice_file),  # ref_audio
-            "",                       # ref_text
-            True,                     # use_xvector
-            text_content,             # target_text
-            selected_lang,            # language
-            "0.6B",                   # model_size
+            handle_file(voice_file),  # Reference audio path
+            "",                       # Prompt text (empty if just voice cloning)
+            selected_lang,            # Prompt language
+            text_content,             # Target text to speak
+            selected_lang,            # Target language
+            "0.6B",                   # Model size
         )
 
         result = None

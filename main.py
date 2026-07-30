@@ -33,23 +33,26 @@ AUDIO_DIR = "static/audio"
 os.makedirs(AUDIO_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Helper function to auto-detect reference voice file
+
 def get_reference_voice_file() -> str:
+    """Auto-detects reference WAV voice file in root directory."""
     possible_names = ["voice_reference.wav", "your_cloned_voice.wav", "voice.wav"]
     for name in possible_names:
         if os.path.exists(name):
             return name
     
-    # Fallback search for any .wav file in the current directory
+    # Fallback search for any .wav file in root
     for file in os.listdir("."):
         if file.endswith(".wav") and not file.startswith("speech_") and not file.startswith("danitts_"):
             return file
             
     return ""
 
+
 class SpeechRequest(BaseModel):
     text: str
     language: str = "English"
+
 
 @app.post("/api/v1/tts")
 async def generate_speech(data: SpeechRequest, request: Request):
@@ -67,47 +70,68 @@ async def generate_speech(data: SpeechRequest, request: Request):
     logger.info(f"Synthesizing text: '{text_content[:30]}...' using voice file: {voice_file}")
 
     try:
-        # Connect to Gradio Hugging Face Space
+        # Connect to HF Space
         client = Client("Qwen/Qwen3-TTS")
 
-        # Execute prediction call
-        # Passes positional args corresponding to the space interface
+        # Dynamically discover endpoints available on the space
+        target_api_name = None
         try:
-            result = client.predict(
-                handle_file(voice_file), # Reference audio file
-                "",                      # Reference transcript (optional)
-                True,                    # Use x-vector for cloning
-                text_content,            # Target text to pronounce
-                data.language,           # Target language
-                "0.6B",                  # Model size
-                fn_index=1               # Voice cloning endpoint tab index
-            )
-        except Exception as api_err:
-            logger.warning(f"fn_index call failed ({api_err}), attempting direct positional fallback...")
-            result = client.predict(
-                handle_file(voice_file),
-                "",
-                True,
-                text_content,
-                data.language,
-                "0.6B"
-            )
+            api_info = client.view_api(return_format="dict")
+            named_endpoints = api_info.get("named_endpoints", {})
+            
+            # Find an endpoint related to voice cloning or TTS generation
+            for name in named_endpoints.keys():
+                if any(k in name.lower() for k in ["clone", "generate", "tts", "predict"]):
+                    target_api_name = name
+                    break
+            
+            if not target_api_name and named_endpoints:
+                target_api_name = list(named_endpoints.keys())[0]
+        except Exception as e:
+            logger.warning(f"Could not inspect API endpoints automatically: {e}")
 
-        # Process generated output path
+        logger.info(f"Targeting Gradio endpoint: {target_api_name or '/voice_clone (fallback)'}")
+
+        # Execute prediction call
+        result = None
+        predict_args = (
+            handle_file(voice_file),  # Reference audio
+            "",                       # Reference transcript
+            True,                     # Use x-vector
+            text_content,             # Target text
+            data.language,            # Target language
+            "0.6B"                    # Model size
+        )
+
+        # Attempt call using discovered api_name or common endpoint names
+        endpoints_to_try = [target_api_name, "/voice_clone", "/predict", "/generate"]
+        for endpoint in filter(None, endpoints_to_try):
+            try:
+                result = client.predict(*predict_args, api_name=endpoint)
+                if result:
+                    break
+            except Exception as ep_err:
+                logger.warning(f"Endpoint '{endpoint}' failed: {ep_err}")
+                continue
+
+        # Last resort positional fallback
+        if not result:
+            result = client.predict(*predict_args, fn_index=0)
+
+        # Process returned audio path
         temp_audio_path = result[0] if isinstance(result, (tuple, list)) else result
         
         if not temp_audio_path or not os.path.exists(temp_audio_path):
             raise Exception("Gradio client returned an invalid audio file path.")
 
-        # Generate unique filename for output
+        # Save generated file to public static folder
         unique_id = uuid.uuid4().hex[:10]
         filename = f"danitts_{unique_id}.wav"
         destination_path = os.path.join(AUDIO_DIR, filename)
 
-        # Copy audio file to public static folder
         shutil.copy(temp_audio_path, destination_path)
 
-        # Construct public URL based on incoming request host
+        # Construct public URL based on incoming host request
         base_url = str(request.base_url).rstrip("/")
         audio_url = f"{base_url}/static/audio/{filename}"
 
@@ -121,8 +145,9 @@ async def generate_speech(data: SpeechRequest, request: Request):
         }
 
     except Exception as e:
-        logger.error(f"Speech synthesis exception: {str(e)}")
+        logger.error(f"Speech synthesis error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Speech synthesis error: {str(e)}")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_ui():
@@ -138,6 +163,7 @@ async def serve_ui():
         </body>
     </html>
     """
+
 
 if __name__ == "__main__":
     import uvicorn

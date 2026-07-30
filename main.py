@@ -82,6 +82,8 @@ async def generate_speech(data: SpeechRequest, request: Request):
         "Portuguese",
         "Russian",
     ]
+    
+    # Fallback to English if an unsupported language string is provided
     selected_lang = (
         data.language if data.language in allowed_langs else "English"
     )
@@ -100,31 +102,23 @@ async def generate_speech(data: SpeechRequest, request: Request):
     try:
         client = Client("Qwen/Qwen3-TTS")
 
-        # Positional array aligned to exact Qwen3-TTS gradio parameters:
-        # [ref_audio, prompt_text, prompt_lang, target_text, target_lang, use_xvector, model_size]
-        predict_args = (
-            handle_file(voice_file),  # Reference audio path
-            "",                       # Prompt text (empty if just voice cloning)
-            selected_lang,            # Prompt language
-            text_content,             # Target text to speak
-            selected_lang,            # Target language
-            "0.6B",                   # Model size
-        )
-
-        result = None
-        endpoints_to_try = ["/voice_clone", "/predict", "/generate"]
-
-        for endpoint in endpoints_to_try:
-            try:
-                result = client.predict(*predict_args, api_name=endpoint)
-                if result:
-                    break
-            except Exception as ep_err:
-                logger.debug(f"Endpoint '{endpoint}' failed: {ep_err}")
-                continue
-
-        if not result:
-            result = client.predict(*predict_args, fn_index=0)
+        # Explicit kwargs fallback mapping matching Gradio UI parameters
+        try:
+            result = client.predict(
+                ref_audio=handle_file(voice_file),
+                ref_text="",
+                target_text=text_content,
+                target_lang=selected_lang,
+                api_name="/voice_clone"
+            )
+        except Exception:
+            # Fallback for positional signature matching standard TTS endpoints
+            result = client.predict(
+                handle_file(voice_file),
+                text_content,
+                selected_lang,
+                api_name="/predict"
+            )
 
         temp_audio_path = (
             result[0] if isinstance(result, (tuple, list)) else result

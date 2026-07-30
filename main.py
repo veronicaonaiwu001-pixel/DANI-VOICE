@@ -82,8 +82,6 @@ async def generate_speech(data: SpeechRequest, request: Request):
         "Portuguese",
         "Russian",
     ]
-    
-    # Fallback to English if an unsupported language string is provided
     selected_lang = (
         data.language if data.language in allowed_langs else "English"
     )
@@ -102,23 +100,16 @@ async def generate_speech(data: SpeechRequest, request: Request):
     try:
         client = Client("Qwen/Qwen3-TTS")
 
-        # Explicit kwargs fallback mapping matching Gradio UI parameters
-        try:
-            result = client.predict(
-                ref_audio=handle_file(voice_file),
-                ref_text="",
-                target_text=text_content,
-                target_lang=selected_lang,
-                api_name="/voice_clone"
-            )
-        except Exception:
-            # Fallback for positional signature matching standard TTS endpoints
-            result = client.predict(
-                handle_file(voice_file),
-                text_content,
-                selected_lang,
-                api_name="/predict"
-            )
+        # Standard Gradio call using positional fn_index=0 to avoid API route name mismatches
+        result = client.predict(
+            handle_file(voice_file),  # Reference audio
+            "",                       # Prompt text
+            selected_lang,            # Prompt language
+            text_content,             # Target text to speak
+            selected_lang,            # Target language
+            "0.6B",                   # Model size variant
+            fn_index=0,
+        )
 
         temp_audio_path = (
             result[0] if isinstance(result, (tuple, list)) else result

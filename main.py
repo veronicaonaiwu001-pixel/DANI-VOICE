@@ -13,7 +13,7 @@ logger = logging.getLogger("danitts")
 
 app = FastAPI(title="danitts Studio API")
 
-# Initialize Client with the inspected HF space
+# Initialize Hugging Face Gradio Client
 TTS_CLIENT = Client("mrfakename/E2-F5-TTS")
 
 # ------------------------------------------------------------------------------
@@ -43,7 +43,7 @@ async def generate_speech(request: TTSRequest):
 
         logger.info(f"Generating speech for prompt: '{request.text}'")
 
-        # Matched precisely to Client.predict() schema from Colab
+        # Call HF space prediction
         result = TTS_CLIENT.predict(
             ref_audio=handle_file(ref_path),
             ref_text="",
@@ -52,9 +52,24 @@ async def generate_speech(request: TTSRequest):
             api_name="/predict"
         )
 
-        logger.info("Speech synthesis completed successfully.")
-        return {"audio_path": result}
+        logger.info(f"Speech synthesis result: {result}")
+
+        # Extract path string whether Gradio returns a dict or raw string path
+        filepath = result.get("name") if isinstance(result, dict) else str(result)
+        
+        # Return audio_url AND audio_path to satisfy any frontend key lookup
+        return {
+            "audio_url": f"/api/v1/audio?path={filepath}",
+            "audio_path": filepath
+        }
 
     except Exception as e:
         logger.error(f"Speech synthesis error: {e}")
         raise HTTPException(status_code=500, detail=f"Speech synthesis error: {str(e)}")
+
+@app.get("/api/v1/audio")
+async def get_audio(path: str):
+    """Serves the generated audio file from disk to the frontend player."""
+    if os.path.exists(path):
+        return FileResponse(path, media_type="audio/wav")
+    raise HTTPException(status_code=404, detail="Audio file not found")

@@ -100,15 +100,13 @@ async def generate_speech(data: SpeechRequest, request: Request):
     try:
         client = Client("Qwen/Qwen3-TTS")
 
-        # Standard Gradio call using positional fn_index=0 to avoid API route name mismatches
+        # Pass named parameters directly matching the Space's signature
         result = client.predict(
-            handle_file(voice_file),  # Reference audio
-            "",                       # Prompt text
-            selected_lang,            # Prompt language
-            text_content,             # Target text to speak
-            selected_lang,            # Target language
-            "0.6B",                   # Model size variant
-            fn_index=0,
+            ref_audio=handle_file(voice_file),
+            ref_text="Reference voice sample",
+            target_text=text_content,
+            target_lang=selected_lang,
+            api_name="/predict"
         )
 
         temp_audio_path = (

@@ -100,49 +100,46 @@ async def generate_speech(data: SpeechRequest, request: Request):
     try:
         client = Client("Qwen/Qwen3-TTS")
 
-        # Log exact API endpoints to Render console for debugging
-        try:
-            api_info = client.view_api(return_format="dict")
-            logger.info(f"Target Space API Schema: {api_info}")
-        except Exception as api_err:
-            logger.warning(f"Could not fetch view_api info: {api_err}")
+        # Arguments array matching standard Qwen TTS gradio parameters
+        args = [
+            handle_file(voice_file),  # ref_audio
+            "",                       # ref_text
+            selected_lang,            # prompt_lang / target_lang
+            text_content,             # target_text
+            selected_lang,            # target_language
+            "0.6B",                   # model size
+        ]
 
         result = None
 
-        # Strategy A: Pass named arguments targeting standard TTS signature
-        try:
-            result = client.predict(
-                ref_audio=handle_file(voice_file),
-                ref_text="",
-                target_text=text_content,
-                target_lang=selected_lang,
-            )
-        except Exception as e_named:
-            logger.warning(f"Named kwargs strategy failed: {e_named}")
-
-        # Strategy B: Fallback to single text + audio standard positional prediction
-        if not result:
+        # Loop through fn_indices explicitly specifying api_name=None to avoid Gradio ambiguity
+        for target_index in [0, 1, 2]:
             try:
                 result = client.predict(
-                    handle_file(voice_file),
-                    text_content,
-                    selected_lang,
+                    *args[:5],  # test 5-arg payload
+                    api_name=None,
+                    fn_index=target_index,
                 )
-            except Exception as e_pos:
-                logger.warning(f"Positional 3-arg strategy failed: {e_pos}")
+                if result:
+                    break
+            except Exception as e1:
+                logger.debug(f"fn_index {target_index} 5-arg failed: {e1}")
+                try:
+                    result = client.predict(
+                        *args,  # test full payload
+                        api_name=None,
+                        fn_index=target_index,
+                    )
+                    if result:
+                        break
+                except Exception as e2:
+                    logger.debug(f"fn_index {target_index} full-arg failed: {e2}")
+                    continue
 
-        # Strategy C: Raw predict using default fn_index without explicit api_name parameter string
         if not result:
-            result = client.predict(
-                handle_file(voice_file),
-                "",
-                selected_lang,
-                text_content,
-                selected_lang,
-                "0.6B",
-            )
+            raise Exception("Failed to execute prediction across all Gradio fn_indices.")
 
-        # Process output audio path
+        # Process output path
         temp_audio_path = None
         if isinstance(result, (tuple, list)):
             temp_audio_path = result[0]
@@ -152,7 +149,7 @@ async def generate_speech(data: SpeechRequest, request: Request):
             temp_audio_path = str(result)
 
         if not temp_audio_path or not os.path.exists(temp_audio_path):
-            raise Exception(f"Gradio client returned an invalid audio path: {temp_audio_path}")
+            raise Exception(f"Gradio client returned an invalid audio file path: {temp_audio_path}")
 
         unique_id = uuid.uuid4().hex[:10]
         filename = f"danitts_{unique_id}.wav"

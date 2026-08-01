@@ -1,5 +1,4 @@
 fastapi
 uvicorn
-gradio_client
+requests
 pydantic
-python-multipart

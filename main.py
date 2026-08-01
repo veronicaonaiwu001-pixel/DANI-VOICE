@@ -13,7 +13,7 @@ logger = logging.getLogger("danitts")
 
 app = FastAPI(title="danitts Studio API")
 
-# Live Colab Backend URL
+# Live Colab GPU Backend URL
 COLAB_BACKEND_URL = "https://duchess-festivity-scalding.ngrok-free.dev"
 
 # ------------------------------------------------------------------------------

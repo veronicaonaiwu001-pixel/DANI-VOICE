@@ -1,8 +1,8 @@
 import os
 import logging
+import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from gradio_client import Client, handle_file
 from pydantic import BaseModel
 
 # ------------------------------------------------------------------------------
@@ -13,8 +13,8 @@ logger = logging.getLogger("danitts")
 
 app = FastAPI(title="danitts Studio API")
 
-# Initialize Hugging Face Gradio Client
-TTS_CLIENT = Client("mrfakename/E2-F5-TTS")
+# Live Colab Backend Ngrok URL
+COLAB_BACKEND_URL = "https://duchess-festivity-scalding.ngrok-free.dev"
 
 # ------------------------------------------------------------------------------
 # Request Schemas
@@ -27,49 +27,55 @@ class TTSRequest(BaseModel):
 # ------------------------------------------------------------------------------
 @app.get("/", response_class=FileResponse)
 async def serve_index():
-    """Serves the danitts Studio UI at the root path."""
+    """Serves the frontend UI."""
     index_path = os.path.join(os.path.dirname(__file__), "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
-    raise HTTPException(status_code=404, detail="index.html not found in repository.")
+    raise HTTPException(status_code=404, detail="index.html not found.")
 
 @app.post("/api/v1/tts")
 async def generate_speech(request: TTSRequest):
-    """Synthesizes speech from prompt text using voice_reference.wav."""
+    """Sends audio synthesis request to Colab GPU and returns synthesized WAV path."""
     try:
         ref_path = os.path.join(os.path.dirname(__file__), "voice_reference.wav")
         if not os.path.exists(ref_path):
-            raise HTTPException(status_code=400, detail="voice_reference.wav missing from repository.")
+            raise HTTPException(status_code=400, detail="voice_reference.wav missing from repo.")
 
-        logger.info(f"Generating speech for prompt: '{request.text}'")
+        logger.info(f"Forwarding prompt '{request.text}' to Colab GPU...")
 
-        # Call HF space prediction
-        result = TTS_CLIENT.predict(
-            ref_audio=handle_file(ref_path),
-            ref_text="",
-            gen_text=request.text,
-            remove_silence=False,
-            api_name="/predict"
-        )
+        # Send reference audio + text to Colab GPU backend
+        with open(ref_path, "rb") as f:
+            files = {"ref_audio": ("voice_reference.wav", f, "audio/wav")}
+            data = {"text": request.text}
+            
+            response = requests.post(
+                f"{COLAB_BACKEND_URL}/synthesize",
+                data=data,
+                files=files,
+                headers={"ngrok-skip-browser-warning": "true"}  # Bypasses Ngrok landing page
+            )
 
-        logger.info(f"Speech synthesis result: {result}")
+        if response.status_code != 200:
+            raise HTTPException(status_code=500, detail=f"Colab GPU error: {response.text}")
 
-        # Extract path string whether Gradio returns a dict or raw string path
-        filepath = result.get("name") if isinstance(result, dict) else str(result)
-        
-        # Return audio_url AND audio_path to satisfy any frontend key lookup
+        # Save returned WAV file on Render
+        output_path = os.path.join(os.path.dirname(__file__), "output.wav")
+        with open(output_path, "wb") as out_f:
+            out_f.write(response.content)
+
         return {
-            "audio_url": f"/api/v1/audio?path={filepath}",
-            "audio_path": filepath
+            "audio_url": "/api/v1/audio",
+            "audio_path": output_path
         }
 
     except Exception as e:
-        logger.error(f"Speech synthesis error: {e}")
+        logger.error(f"Synthesis proxy error: {e}")
         raise HTTPException(status_code=500, detail=f"Speech synthesis error: {str(e)}")
 
 @app.get("/api/v1/audio")
-async def get_audio(path: str):
-    """Serves the generated audio file from disk to the frontend player."""
-    if os.path.exists(path):
-        return FileResponse(path, media_type="audio/wav")
-    raise HTTPException(status_code=404, detail="Audio file not found")
+async def get_audio():
+    """Serves generated output.wav back to audio player."""
+    output_path = os.path.join(os.path.dirname(__file__), "output.wav")
+    if os.path.exists(output_path):
+        return FileResponse(output_path, media_type="audio/wav")
+    raise HTTPException(status_code=404, detail="Audio file not found.")
